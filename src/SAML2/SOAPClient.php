@@ -63,7 +63,7 @@ class SAML2_SOAPClient
             ),
         );
 
-        /* Determine if we are going to do a MutualSSL connection between the IdP and SP  - Shoaib */
+        // Determine if we are going to do a MutualSSL connection between the IdP and SP  - Shoaib
         if ($srcMetadata->hasValue('saml.SOAPClient.certificate')) {
             $cert = $srcMetadata->getValue('saml.SOAPClient.certificate');
             if ($cert !== FALSE) {
@@ -91,7 +91,7 @@ class SAML2_SOAPClient
             }
         }
 
-        /* Do peer certificate verification */
+        // do peer certificate verification
         if ($dstMetadata !== NULL) {
             $peerPublicKeys = $dstMetadata->getPublicKeys('signing', TRUE);
             $certData = '';
@@ -107,7 +107,7 @@ class SAML2_SOAPClient
             if (!file_exists($peerCertFile)) {
                 SimpleSAML_Utilities::writeFile($peerCertFile, $certData);
             }
-            /* Create ssl context */
+            // create ssl context
             $ctxOpts['ssl']['verify_peer'] = TRUE;
             $ctxOpts['ssl']['verify_depth'] = 1;
             $ctxOpts['ssl']['cafile'] = $peerCertFile;
@@ -122,30 +122,46 @@ class SAML2_SOAPClient
             $ctxOpts['http']['header'] .= 'Authorization: Basic ' . $authData . "\n";
         }
 
-        /* Add soap-envelopes */
+        $context = stream_context_create($ctxOpts);
+        if ($context === NULL) {
+            throw new Exception('Unable to create SSL stream context');
+        }
+
+        $options = array(
+            'uri' => $issuer,
+            'location' => $msg->getDestination(),
+            'stream_context' => $context,
+        );
+
+        if ($srcMetadata->hasValue('saml.SOAPClient.proxyhost')) {
+            $options['proxy_host'] = $srcMetadata->getValue('saml.SOAPClient.proxyhost');
+        }
+
+        if ($srcMetadata->hasValue('saml.SOAPClient.proxyport')) {
+            $options['proxy_port'] = $srcMetadata->getValue('saml.SOAPClient.proxyport');
+        }
+
+        $x = new SoapClient(NULL, $options);
+
+        // Add soap-envelopes
         $request = $msg->toSignedXML();
         $request = self::START_SOAP_ENVELOPE . $request->ownerDocument->saveXML($request) . self::END_SOAP_ENVELOPE;
 
         SAML2_Utils::getContainer()->debugMessage($request, 'out');
 
-        $ctxOpts['http']['content'] = $request;
-        $ctxOpts['http']['header'] .= 'Content-Type: text/xml; charset=utf-8' . "\n";
-        $ctxOpts['http']['method'] = 'POST';
+        $action = 'http://www.oasis-open.org/committees/security';
+        $version = '1.1';
         $destination = $msg->getDestination();
 
         /* Perform SOAP Request over HTTP */
-        $context = stream_context_create($ctxOpts);
-        if ($context === NULL) {
-            throw new Exception('Unable to create stream context');
-        }
-        $soapresponsexml = @file_get_contents($destination, FALSE, $context);
-        if ($soapresponsexml === FALSE) {
-            throw new Exception('Error processing SOAP call: ' . SimpleSAML_Utilities::getLastError());
+        $soapresponsexml = $x->__doRequest($request, $destination, $action, $version);
+        if ($soapresponsexml === NULL || $soapresponsexml === "") {
+            throw new Exception('Empty SOAP response, check peer certificate.');
         }
 
         SAML2_Utils::getContainer()->debugMessage($soapresponsexml, 'in');
 
-        /* Convert to SAML2_Message (DOMElement) */
+        // Convert to SAML2_Message (DOMElement)
         try {
             $dom = SAML2_DOMDocumentFactory::fromString($soapresponsexml);
         } catch (SAML2_Exception_RuntimeException $e) {
@@ -156,7 +172,7 @@ class SAML2_SOAPClient
         if (isset($soapfault)) {
             throw new Exception($soapfault);
         }
-        /* Extract the message from the response */
+        //Extract the message from the response
         $samlresponse = SAML2_Utils::xpQuery($dom->firstChild, '/soap-env:Envelope/soap-env:Body/*[1]');
         $samlresponse = SAML2_Message::fromXML($samlresponse[0]);
 
@@ -181,6 +197,9 @@ class SAML2_SOAPClient
         if (!isset($options['ssl']['peer_certificate'])) {
             return;
         }
+
+        //$out = '';
+        //openssl_x509_export($options['ssl']['peer_certificate'], $out);
 
         $key = openssl_pkey_get_public($options['ssl']['peer_certificate']);
         if ($key === FALSE) {
@@ -249,8 +268,10 @@ class SAML2_SOAPClient
             return NULL;
         }
         $soapFaultElement = $soapFault[0];
-        $soapFaultString = "Unknown fault string found"; // There is a fault element but we haven't found out what the fault string is
-        $faultStringElement =   SAML2_Utils::xpQuery($soapFaultElement, './soap-env:faultstring') ; // find out the fault string
+        // There is a fault element but we haven't found out what the fault string is
+        $soapFaultString = "Unknown fault string found";
+        // find out the fault string
+        $faultStringElement =   SAML2_Utils::xpQuery($soapFaultElement, './soap-env:faultstring') ;
         if (!empty($faultStringElement)) {
             return $faultStringElement[0]->textContent;
         }
