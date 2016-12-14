@@ -11,6 +11,39 @@ class SAML2_SOAPClient
     const START_SOAP_ENVELOPE = '<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Header/><soap-env:Body>';
     const END_SOAP_ENVELOPE = '</soap-env:Body></soap-env:Envelope>';
 
+
+    /**
+     * The username to use for HTTP authentication.
+     *
+     * @var string
+     */
+    private $username;
+
+    /**
+     * The password to use for HTTP authentication.
+     *
+     * @var string
+     */
+    private $password;
+
+
+    /**
+     * Set username & password for HTTP Basic Auth.
+     *
+     * @param string $username  The username.
+     * @param string $passwort  The password.
+     */
+    public function setBasicAuth($username, $password)
+    {
+        assert('is_string($username)');
+        assert('is_string($password)');
+
+        $this->username = $username;
+        $this->password = $password;
+    }
+
+
+
     /**
      * This function sends the SOAP message to the service location and returns SOAP response
      *
@@ -78,6 +111,15 @@ class SAML2_SOAPClient
             $ctxOpts['ssl']['verify_peer'] = TRUE;
             $ctxOpts['ssl']['verify_depth'] = 1;
             $ctxOpts['ssl']['cafile'] = $peerCertFile;
+        }
+
+        $ctxOpts['http']['header'] = 'SOAPAction: "http://www.oasis-open.org/committees/security"' . "\n";
+
+        if ($this->username !== NULL && $this->password !== NULL) {
+            /* Add HTTP Basic authentication header. */
+            $authData = $this->username . ':' . $this->password;
+            $authData = base64_encode($authData);
+            $ctxOpts['http']['header'] .= 'Authorization: Basic ' . $authData . "\n";
         }
 
         $context = stream_context_create($ctxOpts);
