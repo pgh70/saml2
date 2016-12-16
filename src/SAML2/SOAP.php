@@ -17,7 +17,13 @@ class SAML2_SOAP extends SAML2_Binding
      */
     public function send(SAML2_Message $message)
     {
-        
+
+        if ($this->destination === NULL) {
+            $destination = $message->getDestination();
+        } else {
+            $destination = $this->destination;
+        }
+
         $envelope = '<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/">'.
                     '<soap-env:Header/><soap-env:Body /></soap-env:Envelope>';
 
@@ -28,12 +34,12 @@ class SAML2_SOAP extends SAML2_Binding
 
         if ($message->toSignedXML()->localName === 'Response') {
             $response = new SAML2_XML_ecp_Response();
-            $response->AssertionConsumerServiceURL = $this->getDestination();
+            $response->AssertionConsumerServiceURL = $destination;
             $response->toXML($soapHeader->item(0));
         }
 
         $soapBody->item(0)->appendChild($doc->importNode($message->toSignedXML(), true));
-        
+
         print($doc->saveXML());
         exit(0);
     }
