@@ -38,7 +38,7 @@ class SAML2_SOAP extends SAML2_Binding
             $response->toXML($soapHeader->item(0));
         }
 
-        $soapBody->item(0)->appendChild($doc->importNode($message->toSignedXML(), true));
+        $soapBody->item(0)->appendChild($doc->importNode($message->toUnsignedXML(), true));
 
         print($doc->saveXML());
         exit(0);
